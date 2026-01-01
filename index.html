@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>סימולטור מודל כלכלי ואימפקט</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f6; }
+        input[type="number"] { width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
+        .sidebar { background-color: #ffffff; border-left: 1px solid #e0e0e0; }
+        th, td { font-size: 0.75rem; padding: 0.4rem; vertical-align: middle; white-space: nowrap; }
+        
+        /* Tab Styles */
+        .tab-btn { border-bottom: 3px solid transparent; color: #6b7280; }
+        .tab-btn.active { border-bottom: 3px solid #2563eb; color: #1e3a8a; font-weight: bold; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+<div class="flex flex-col md:flex-row min-h-screen">
+    
+    <!-- Sidebar / Parameters -->
+    <div class="sidebar w-full md:w-1/4 flex flex-col md:h-screen md:sticky md:top-0 shadow-sm z-10">
+        
+        <!-- Header -->
+        <div class="p-6 border-b bg-white">
+            <h2 class="text-xl font-bold text-gray-700">הגדרות סימולטור</h2>
+            <p class="text-xs text-gray-400 mt-1">שנה ערכים ולחץ על "חישוב" למטה</p>
+        </div>
+
+        <!-- Scrollable Inputs Area -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
+            
+            <!-- Revenue Settings -->
+            <div>
+                <h3 class="font-semibold text-sm text-gray-500 mb-2">1. הכנסות (Revenue)</h3>
+                <label class="block text-sm font-medium mb-1">מחיר ניהול מלא (שנתי)</label>
+                <input type="number" id="price_op" value="350000" step="10000" class="border-indigo-300 bg-indigo-50">
+
+                <label class="block text-sm font-medium mb-1 mt-3">מחיר הקמה (חד פעמי)</label>
+                <input type="number" id="price_setup" value="150000" step="5000">
+                
+                <label class="block text-sm font-medium mb-1 mt-3">מחיר רישיון לתלמיד (שנתי)</label>
+                <input type="number" id="price_license" value="200" step="10">
+            </div>
+
+            <hr class="border-gray-200">
+
+            <!-- Growth Settings -->
+            <div>
+                <h3 class="font-semibold text-sm text-gray-500 mb-2">2. מודל צמיחה (Growth)</h3>
+                <label class="block text-sm font-medium mb-1">תקרה: מקסימום תלמידים בבי"ס</label>
+                <input type="range" id="students_slider" min="200" max="1500" value="500" class="w-full" oninput="updateSliderLabel()">
+                <div class="flex justify-between text-xs text-gray-500">
+                    <span>צמיחה: +150 לשנה</span>
+                    <span class="font-bold text-blue-600" id="students_val">500 מקסימום</span>
+                </div>
+            </div>
+
+            <hr class="border-gray-200">
+
+            <!-- Impact Settings -->
+            <div class="bg-green-50 p-3 rounded border border-green-200">
+                <h3 class="font-semibold text-sm text-green-700 mb-2">3. הנחות אימפקט (Impact)</h3>
+                <label class="block text-sm font-medium mb-1 text-green-800">ממוצע תלמידים למורה</label>
+                <input type="number" id="students_per_teacher" value="10" step="1" class="border-green-300">
+                <p class="text-xs text-gray-500 mt-1">יחס נוכחי: 1 מורה לכל <span id="ratio_display">10</span> תלמידים</p>
+            </div>
+
+            <hr class="border-gray-200">
+
+            <!-- Cost Settings -->
+            <div>
+                <h3 class="font-semibold text-sm text-gray-500 mb-2">4. הוצאות (Costs)</h3>
+                <label class="block text-sm font-medium mb-1">עלות מטה שנתית קבועה (₪)</label>
+                <input type="number" id="fixed_cost" value="8500000" step="100000">
+                
+                <label class="block text-sm font-medium mb-1 mt-3">עלות משתנה לבי''ס פעיל (₪)</label>
+                <input type="number" id="variable_cost" value="63000" step="1000">
+                <p id="cost_warning" class="text-xs mt-1 font-bold"></p>
+            </div>
+        </div>
+
+        <!-- Sticky Bottom Button -->
+        <div class="p-4 border-t bg-gray-50">
+            <button onclick="updateCalculation()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded shadow flex justify-center items-center transition duration-150 transform active:scale-95">
+                <span class="ml-2">🔄</span>
+                <span>חישוב נתונים מחדש</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="w-full md:w-3/4 p-6 overflow-y-auto bg-gray-50">
+        
+        <!-- Header & Tabs -->
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">דשבורד ניהולי</h1>
+            <div class="flex space-x-reverse space-x-6 border-b border-gray-300">
+                <button onclick="switchTab('financial')" id="btn-financial" class="tab-btn active pb-2 px-4 text-lg">📊 מודל פיננסי</button>
+                <button onclick="switchTab('impact')" id="btn-impact" class="tab-btn pb-2 px-4 text-lg">🌍 מדדי אימפקט (תלמידים/מורים)</button>
+            </div>
+        </div>
+
+        <!-- TAB 1: Financial Model -->
+        <div id="tab-financial" class="tab-content">
+            <!-- Table Section -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6">
+                <h2 class="text-xl font-semibold mb-2">תרחיש פיננסי (10 שנים)</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-right border-collapse">
+                        <thead class="bg-gray-100 text-gray-700">
+                            <tr>
+                                <th class="border text-center w-8">שנה</th>
+                                <!-- Updated Header: Removed (פעילים) and added width constraint with wrapping -->
+                                <th class="border bg-indigo-100 font-semibold text-xs w-20 whitespace-normal leading-tight">ניהול בתי ספר מודל</th>
+                                <th class="border bg-yellow-100">הקמות<br><span class="text-xs font-normal">(חדשים)</span></th>
+                                <th class="border bg-yellow-200 font-bold text-gray-900">רשיונות<br><span class="text-xs font-normal text-red-600">(חדשים!)</span></th>
+                                <th class="border bg-gray-100 text-gray-500 text-xs">סה"כ<br>ברשיונות</th>
+                                <th class="border bg-indigo-50 text-indigo-800 text-xs">הכ'<br>ניהול</th>
+                                <th class="border bg-blue-50 text-blue-800 text-xs">הכ'<br>הקמה</th>
+                                <th class="border bg-green-50 text-green-800 text-xs font-bold border-l-2 border-green-200">הכ'<br>רשיונות</th>
+                                <th class="border bg-gray-50 font-bold">סה"כ</th>
+                                <th class="border text-red-800">הוצאות</th>
+                                <th class="border font-bold">נטו</th>
+                                <th class="border">מצטבר</th>
+                            </tr>
+                        </thead>
+                        <tbody id="simulation_table"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- KPIs -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-lg shadow text-center border-t-4 border-blue-500">
+                    <div class="text-gray-500 text-sm">סך הכנסות (10 שנים)</div>
+                    <div class="text-2xl font-bold text-blue-600" id="kpi_revenue">₪0</div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow text-center border-t-4 border-green-500">
+                    <div class="text-gray-500 text-sm">סך רווח נקי (10 שנים)</div>
+                    <div class="text-2xl font-bold text-green-600" id="kpi_profit">₪0</div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow text-center border-t-4 border-purple-500">
+                    <div class="text-gray-500 text-sm">נקודת איזון (ROI)</div>
+                    <div class="text-2xl font-bold text-purple-600" id="kpi_breakeven">Not Reached</div>
+                </div>
+            </div>
+
+            <!-- Financial Charts -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">ויזואליזציה פיננסית</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div><canvas id="chartRevenue"></canvas></div>
+                    <div><canvas id="chartCashFlow"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Impact Analysis -->
+        <div id="tab-impact" class="tab-content hidden">
+            
+            <!-- Impact KPIs -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white p-6 rounded-lg shadow text-center border-t-4 border-teal-500">
+                    <div class="text-gray-500 text-sm mb-1">סה"כ תלמידים בשנה 10</div>
+                    <div class="text-3xl font-bold text-teal-600" id="imp_students_y10">0</div>
+                    <div class="text-xs text-gray-400 mt-1">ילדים שנהנים מהמודל</div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow text-center border-t-4 border-orange-500">
+                    <div class="text-gray-500 text-sm mb-1">סה"כ מורים בשנה 10</div>
+                    <div class="text-3xl font-bold text-orange-600" id="imp_teachers_y10">0</div>
+                    <div class="text-xs text-gray-400 mt-1">מורים מוכשרים/פעילים</div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow text-center border-t-4 border-blue-500">
+                    <div class="text-gray-500 text-sm mb-1">סה"כ בתי ספר פעילים</div>
+                    <div class="text-3xl font-bold text-blue-600" id="imp_schools_y10">0</div>
+                    <div class="text-xs text-gray-400 mt-1">בשנה 10</div>
+                </div>
+            </div>
+
+            <!-- Impact Table -->
+            <div class="bg-white p-4 rounded-lg shadow mb-6">
+                <h2 class="text-xl font-semibold mb-2">טבלת השפעה שנתית</h2>
+                <p class="text-sm text-gray-500 mb-4 bg-gray-50 p-2 rounded">
+                    * חישוב מורים: מעוגל כלפי מעלה (Math.ceil). בתי ספר ב"הקמה" אינם נספרים כאן (כי אין עדיין תלמידים).
+                </p>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-right border-collapse">
+                        <thead class="bg-gray-100 text-gray-700">
+                            <tr>
+                                <th class="border text-center p-3">שנה</th>
+                                <th class="border p-3">בתי ספר פעילים<br><span class="text-xs font-normal">(ניהול + רשיונות)</span></th>
+                                <th class="border p-3 bg-teal-50 text-teal-900">סה"כ תלמידים<br><span class="text-xs font-normal">(פעילים)</span></th>
+                                <th class="border p-3 bg-orange-50 text-orange-900">סה"כ מורים<br><span class="text-xs font-normal">(לפי יחס)</span></th>
+                                <th class="border p-3 text-xs text-gray-400">נוסחת חישוב מורים</th>
+                            </tr>
+                        </thead>
+                        <tbody id="impact_table_body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Impact Charts -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">גרף צמיחת אימפקט</h2>
+                <div class="h-80">
+                    <canvas id="chartImpact"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- Initial Data (10 Years with Saturation) ---
+    let tableData = [
+        { year: 1, qty_setup: 1, qty_op: 1, new_lic_schools: 1 },
+        { year: 2, qty_setup: 10, qty_op: 1, new_lic_schools: 10 },
+        { year: 3, qty_setup: 50, qty_op: 2, new_lic_schools: 75 },
+        { year: 4, qty_setup: 100, qty_op: 2, new_lic_schools: 150 },
+        { year: 5, qty_setup: 500, qty_op: 4, new_lic_schools: 750 },
+        { year: 6, qty_setup: 600, qty_op: 5, new_lic_schools: 1000 }, 
+        { year: 7, qty_setup: 300, qty_op: 5, new_lic_schools: 300 },
+        { year: 8, qty_setup: 150, qty_op: 5, new_lic_schools: 150 },
+        { year: 9, qty_setup: 100, qty_op: 5, new_lic_schools: 50 },
+        { year: 10, qty_setup: 50, qty_op: 5, new_lic_schools: 50 }
+    ];
+
+    const STUDENTS_GROWTH_STEP = 150; 
+    let revChartInstance = null;
+    let cashChartInstance = null;
+    let impactChartInstance = null;
+
+    // --- Tab Switching Logic ---
+    function switchTab(tabName) {
+        document.getElementById('tab-financial').classList.add('hidden');
+        document.getElementById('tab-impact').classList.add('hidden');
+        document.getElementById('btn-financial').classList.remove('active');
+        document.getElementById('btn-impact').classList.remove('active');
+
+        document.getElementById('tab-' + tabName).classList.remove('hidden');
+        document.getElementById('btn-' + tabName).classList.add('active');
+    }
+
+    function updateSliderLabel() {
+        document.getElementById('students_val').innerText = document.getElementById('students_slider').value + ' מקסימום';
+    }
+
+    function formatCurrency(num) {
+        return '₪' + num.toLocaleString('en-US', { maximumFractionDigits: 0, notation: "compact", compactDisplay: "short" });
+    }
+    
+    function formatNumber(num) {
+        return num.toLocaleString('en-US');
+    }
+
+    function updateCalculation() {
+        // 1. Get Inputs
+        const p_setup = Number(document.getElementById('price_setup').value);
+        const p_op = Number(document.getElementById('price_op').value);
+        const p_lic = Number(document.getElementById('price_license').value);
+        const max_students = Number(document.getElementById('students_slider').value);
+        const fixed = Number(document.getElementById('fixed_cost').value);
+        const variable = Number(document.getElementById('variable_cost').value);
+        const students_per_teacher = Number(document.getElementById('students_per_teacher').value) || 25;
+
+        // Update ratio label
+        document.getElementById('ratio_display').innerText = students_per_teacher;
+
+        // Cost Warning Logic
+        const max_lic_rev = p_lic * max_students;
+        const warningEl = document.getElementById('cost_warning');
+        const varInput = document.getElementById('variable_cost');
+        
+        if (variable > max_lic_rev) {
+            warningEl.innerText = `⚠️ הפסד של ${formatCurrency(variable - max_lic_rev)} לבי"ס בשיא`;
+            warningEl.className = "text-xs mt-1 font-bold text-red-600";
+            varInput.className = "border-red-300 bg-red-50";
+        } else {
+            const margin = max_lic_rev - variable;
+            warningEl.innerText = `✅ רווח גולמי ${formatCurrency(margin)} לבי"ס בשיא`;
+            warningEl.className = "text-xs mt-1 font-bold text-green-600";
+            varInput.className = "border-green-300 bg-green-50";
+        }
+
+        // 2. Read Table Inputs (if user edited manually)
+        const rows = document.querySelectorAll('.data-row');
+        if (rows.length > 0) {
+            tableData = [];
+            rows.forEach((row, index) => {
+                const q_setup = Number(row.querySelector('.input-setup').value);
+                const q_op = Number(row.querySelector('.input-op').value);
+                const q_new_lic = Number(row.querySelector('.input-lic').value);
+                tableData.push({ year: index + 1, qty_setup: q_setup, qty_op: q_op, new_lic_schools: q_new_lic });
+            });
+        }
+
+        // 3. Main Loop
+        let cumulativeCash = 0;
+        let totalRev = 0;
+        let totalProfit = 0;
+        let breakEvenYear = null;
+
+        // Arrays for Charts
+        let chartLabels = [];
+        let dataRevSetup = [], dataRevOp = [], dataRevLic = [], dataCost = [], dataCumulative = [], dataCumulativeColor = [];
+        // Arrays for Impact
+        let impactStudents = [], impactTeachers = [], impactSchools = [];
+
+        const tbody = document.getElementById('simulation_table');
+        tbody.innerHTML = '';
+        
+        const impactBody = document.getElementById('impact_table_body');
+        impactBody.innerHTML = '';
+
+        tableData.forEach((row, index) => {
+            const currentYear = row.year;
+            
+            // --- Cohort Logic ---
+            let total_lic_revenue_year = 0;
+            let total_active_lic_schools = 0;
+            let total_students_in_year = 0;
+
+            for (let i = 0; i <= index; i++) {
+                const pastRow = tableData[i];
+                const schoolsJoined = pastRow.new_lic_schools;
+                
+                if (schoolsJoined > 0) {
+                    const yearsActive = currentYear - pastRow.year + 1;
+                    let studentsPerSchool = yearsActive * STUDENTS_GROWTH_STEP;
+                    if (studentsPerSchool > max_students) studentsPerSchool = max_students;
+
+                    const revenueFromCohort = schoolsJoined * studentsPerSchool * p_lic;
+                    total_lic_revenue_year += revenueFromCohort;
+                    total_active_lic_schools += schoolsJoined;
+                    total_students_in_year += (schoolsJoined * studentsPerSchool);
+                }
+            }
+            
+            // Add students from "Managed Schools" (assuming they are at max capacity or similar)
+            // Let's assume managed schools are at Max Capacity for Impact calculation
+            const students_in_managed_schools = row.qty_op * max_students;
+            const grand_total_students = total_students_in_year + students_in_managed_schools;
+            // Use CEIL for teachers
+            const grand_total_teachers = Math.ceil(grand_total_students / students_per_teacher);
+            const grand_total_active_schools = row.qty_op + total_active_lic_schools;
+
+            // Financials
+            const r_setup = row.qty_setup * p_setup;
+            const r_op = row.qty_op * p_op; 
+            const total_rev_year = r_setup + r_op + total_lic_revenue_year;
+            
+            const total_active_units = row.qty_setup + row.qty_op + total_active_lic_schools;
+            const total_cost_year = fixed + (total_active_units * variable);
+            const net_profit = total_rev_year - total_cost_year;
+            cumulativeCash += net_profit;
+
+            // Aggregates
+            totalRev += total_rev_year;
+            totalProfit += net_profit;
+            if (cumulativeCash > 0 && breakEvenYear === null) breakEvenYear = row.year;
+
+            // Push Data
+            chartLabels.push('Year ' + row.year);
+            dataRevSetup.push(r_setup);
+            dataRevOp.push(r_op);
+            dataRevLic.push(total_lic_revenue_year);
+            dataCost.push(total_cost_year);
+            dataCumulative.push(cumulativeCash);
+            dataCumulativeColor.push(cumulativeCash >= 0 ? '#4ade80' : '#f87171');
+            
+            impactStudents.push(grand_total_students);
+            impactTeachers.push(grand_total_teachers);
+            impactSchools.push(grand_total_active_schools);
+
+            // --- Render Financial Row ---
+            const tr = document.createElement('tr');
+            tr.className = "data-row border-b hover:bg-gray-50";
+            tr.innerHTML = `
+                <td class="border font-bold text-center">${row.year}</td>
+                <td class="border bg-indigo-100 p-1"><input type="number" class="input-op text-center bg-transparent w-full font-semibold text-indigo-900" value="${row.qty_op}" onchange="updateCalculation()"></td>
+                <td class="border bg-yellow-100 p-1"><input type="number" class="input-setup text-center bg-transparent w-full" value="${row.qty_setup}" onchange="updateCalculation()"></td>
+                <td class="border bg-yellow-100 p-1"><input type="number" class="input-lic text-center bg-transparent w-full text-blue-900 font-bold" value="${row.new_lic_schools}" onchange="updateCalculation()"></td>
+                <td class="border bg-gray-100 text-center text-xs text-gray-500 font-mono">${total_active_lic_schools}</td>
+                <td class="border bg-indigo-50 text-indigo-800 text-xs">${formatCurrency(r_op)}</td>
+                <td class="border bg-blue-50 text-blue-800 text-xs">${formatCurrency(r_setup)}</td>
+                <td class="border bg-green-50 text-green-800 text-xs font-bold border-l-2 border-green-200">${formatCurrency(total_lic_revenue_year)}</td>
+                <td class="border bg-gray-50 font-bold text-sm">${formatCurrency(total_rev_year)}</td>
+                <td class="border text-red-500 text-sm">${formatCurrency(total_cost_year)}</td>
+                <td class="border font-bold ${net_profit >= 0 ? 'text-green-600' : 'text-red-600'} text-sm">${formatCurrency(net_profit)}</td>
+                <td class="border ${cumulativeCash >= 0 ? 'text-green-600' : 'text-red-600'} text-xs">${formatCurrency(cumulativeCash)}</td>
+            `;
+            tbody.appendChild(tr);
+
+            // --- Render Impact Row ---
+            const trImp = document.createElement('tr');
+            trImp.className = "border-b hover:bg-gray-50";
+            trImp.innerHTML = `
+                <td class="border font-bold text-center p-3">${row.year}</td>
+                <td class="border p-3 text-center text-lg">${formatNumber(grand_total_active_schools)}</td>
+                <td class="border p-3 text-center bg-teal-50 text-teal-800 font-bold text-lg">${formatNumber(grand_total_students)}</td>
+                <td class="border p-3 text-center bg-orange-50 text-orange-800 font-bold text-lg">${formatNumber(grand_total_teachers)}</td>
+                <td class="border p-3 text-center text-xs text-gray-400 font-mono">(${formatNumber(grand_total_students)} / ${students_per_teacher})</td>
+            `;
+            impactBody.appendChild(trImp);
+        });
+
+        // 4. Update Financial KPIs
+        document.getElementById('kpi_revenue').innerText = formatCurrency(totalRev);
+        document.getElementById('kpi_profit').innerText = formatCurrency(totalProfit);
+        document.getElementById('kpi_breakeven').innerText = breakEvenYear ? `Year ${breakEvenYear}` : "Not Reached";
+
+        // 5. Update Impact KPIs (Last Year)
+        const lastIdx = chartLabels.length - 1;
+        document.getElementById('imp_students_y10').innerText = formatNumber(impactStudents[lastIdx]);
+        document.getElementById('imp_teachers_y10').innerText = formatNumber(impactTeachers[lastIdx]);
+        document.getElementById('imp_schools_y10').innerText = formatNumber(impactSchools[lastIdx]);
+
+        // 6. Update Charts
+        updateFinancialCharts(chartLabels, dataRevSetup, dataRevOp, dataRevLic, dataCost, dataCumulative, dataCumulativeColor);
+        updateImpactCharts(chartLabels, impactStudents, impactTeachers);
+    }
+
+    function updateFinancialCharts(labels, dSetup, dOp, dLic, dCost, dCum, dColor) {
+        // Rev Chart
+        const ctxRev = document.getElementById('chartRevenue').getContext('2d');
+        if (revChartInstance) revChartInstance.destroy();
+        revChartInstance = new Chart(ctxRev, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { type: 'line', label: 'Total Cost', data: dCost, borderColor: '#ef4444', borderWidth: 2, tension: 0.1, order: 0 },
+                    { label: 'Management', data: dOp, backgroundColor: '#818cf8', stack: 'Stack 0', order: 1 },
+                    { label: 'Setup', data: dSetup, backgroundColor: '#93c5fd', stack: 'Stack 0', order: 1 },
+                    { label: 'Licenses', data: dLic, backgroundColor: '#22c55e', stack: 'Stack 0', order: 1 }
+                ]
+            },
+            options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+        });
+
+        // Cash Chart
+        const ctxCash = document.getElementById('chartCashFlow').getContext('2d');
+        if (cashChartInstance) cashChartInstance.destroy();
+        cashChartInstance = new Chart(ctxCash, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Cumulative Cash Flow', data: dCum, backgroundColor: dColor, borderColor: '#000', borderWidth: 1 }]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    function updateImpactCharts(labels, students, teachers) {
+        const ctxImp = document.getElementById('chartImpact').getContext('2d');
+        if (impactChartInstance) impactChartInstance.destroy();
+        
+        impactChartInstance = new Chart(ctxImp, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'סה"כ תלמידים',
+                        data: students,
+                        borderColor: '#0d9488', // teal-600
+                        backgroundColor: '#ccfbf1',
+                        borderWidth: 3,
+                        yAxisID: 'y'
+                    },
+                    {
+                        label: 'סה"כ מורים',
+                        data: teachers,
+                        borderColor: '#ea580c', // orange-600
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        yAxisID: 'y1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y: { type: 'linear', display: true, position: 'left', title: {display: true, text: 'תלמידים'} },
+                    y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: {display: true, text: 'מורים'} }
+                }
+            }
+        });
+    }
+
+    // Init on Load
+    window.onload = updateCalculation;
+
+</script>
+
+</body>
+</html>
